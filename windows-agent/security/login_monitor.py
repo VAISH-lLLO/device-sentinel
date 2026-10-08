@@ -2,7 +2,7 @@ import time
 import win32evtlog
 
 from camera.camera_capture import capture_photo
-from network.notifier import send_telegram_message, send_telegram_photo
+from network.notifier import send_telegram_photo
 
 
 SERVER = "localhost"
@@ -35,6 +35,7 @@ def monitor_login_events():
     print("Press Ctrl+C to stop.")
 
     last_event_time = None
+    last_alert_time = None
 
     while True:
         try:
@@ -46,7 +47,17 @@ def monitor_login_events():
                 if event_id in LOGIN_EVENTS:
                     event_time = event.TimeGenerated
 
-                    if last_event_time is None or event_time > last_event_time:
+                    # Ignore duplicate login events within 30 seconds
+                    if (
+                        last_alert_time is not None
+                        and (event_time - last_alert_time).total_seconds() < 30
+                    ):
+                        continue
+
+                    if (
+                        last_event_time is None
+                        or event_time > last_event_time
+                    ):
                         event_name = LOGIN_EVENTS[event_id]
 
                         print(
@@ -58,7 +69,7 @@ def monitor_login_events():
                         # Capture a photo
                         photo_path = capture_photo()
 
-                        # Create Telegram alert
+                        # Create alert text
                         message = (
                             f"🚨 Device Sentinel Alert\n\n"
                             f"Event: {event_name}\n"
@@ -66,10 +77,7 @@ def monitor_login_events():
                             f"Time: {event_time}"
                         )
 
-                        # Send text alert
-                        send_telegram_message(message)
-
-                        # Send captured photo
+                        # Send ONLY the photo with the alert text as caption
                         if photo_path:
                             print(f"Login photo saved: {photo_path}")
 
@@ -79,6 +87,7 @@ def monitor_login_events():
                             )
 
                         last_event_time = event_time
+                        last_alert_time = event_time
 
             time.sleep(3)
 
